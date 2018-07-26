@@ -7,15 +7,51 @@ import csv
 
 from tableObj import Table
 
-class SearchField(QVBoxLayout):
-    def __init__(self, parent=None):
-        QVBoxLayout.__init__(self, parent)
+class LabelLikeButton(QLabel):
+    clicked = pyqtSignal()
+    def __init__(self, parent = None):
+        QLabel.__init__(self, parent)
 
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+class SearchField(QHBoxLayout):
+    def __init__(self, mainwindow, parent=None):
+        QHBoxLayout.__init__(self, parent)
+
+        self.parentWindow = mainwindow
+
+        self.DeleteButton = LabelLikeButton("×")
         self.ParamComboBox = QComboBox()
         self.ParamInput = QLineEdit()
 
-        self.addWidget(self.ParamComboBox)
-        self.addWidget(self.ParamInput)
+        self.ParamInput.textChanged.connect(self.parentWindow.search_in)
+        self.DeleteButton.clicked.connect(self.delete)
+        self.DeleteButton.setStyleSheet("""LabelLikeButton {
+            font-family: sans-serif;
+            font-weight: 1000;
+            font-size: 26px;
+            color: #000;
+        }
+        LabelLikeButton:hover, LabelLikeButton:focus {
+            color: #d22525;
+        }""")
+
+        self.SFLayout = QVBoxLayout()
+        self.SFLayout.addWidget(self.ParamComboBox)
+        self.SFLayout.addWidget(self.ParamInput)
+        self.setAlignment(Qt.AlignJustify)
+
+        self.addWidget(self.DeleteButton,
+                        alignment=Qt.AlignCenter)
+        self.addLayout(self.SFLayout)
+
+    def delete(self):
+        self_index = self.parentWindow.SearchFields.index(self)
+        self.ParamInput.deleteLater()
+        self.ParamComboBox.deleteLater()
+        self.DeleteButton.deleteLater()
+        del self.parentWindow.SearchFields[self_index]
 
     def add_headers_into_cb(self, content):
         for item in content:
@@ -26,52 +62,88 @@ class MainWindow(QWidget):
         QWidget.__init__(self, parent)
 
         self.setWindowFlags(Qt.Window)
-        self.resize(800, 450)
+        self.setWindowTitle('Search Engine')
+        self.resize(1200, 800)
 
-        self.SearchFields = []
-
-        self.SearchButton = QPushButton('Search')
-        self.SearchButton.clicked.connect(self.search_in)
+        self.CSVTable = None
+        self.Delimiter = ','
+        self.Encoding = 'utf-8'
+        self.TableFontSize = '15'
+        self.SearchFields = []   # this array will contain SearchFileds objects
 
         self.OpenCSVButton = QPushButton('Open CSV')
         self.OpenCSVButton.clicked.connect(self.openCSV)
 
+        self.AddSearchFieldButton = QPushButton('Add Search Field')
+        self.AddSearchFieldButton.clicked.connect(self.addSearchField)
+
+        self.SearchButton = QPushButton('Search')
+        self.SearchButton.clicked.connect(self.search_in)
+
+        self.SetDelimiterButton = QPushButton('Set Delimiter')
+        self.SetDelimiterButton.clicked.connect(self.setDelimiter)
+
+        self.SetEncodingButton = QPushButton('Set Encoding')
+        self.SetEncodingButton.clicked.connect(self.setEncoding)
+
+        self.SetTableFontSizeButton = QPushButton('Set Font Size for Table')
+        self.SetTableFontSizeButton.clicked.connect(self.setTableFontSize)
+
+        self.HelpButton = QPushButton('Help')
+        self.HelpButton.clicked.connect(self.show_help)
+
         self.ResultArea = QTableView()
+        self.ResultArea.setStyleSheet("""QTableView{
+            font-size: %spx;
+        }""" %(self.TableFontSize))
 
-        self.MainSearchField = SearchField()
-        self.SubSearchField = SearchField()
+        self.MainSearchField = SearchField(self)
         self.SearchFields.append(self.MainSearchField)
-        self.SearchFields.append(self.SubSearchField)
 
-        self.ButtonBox = QVBoxLayout()
+        ### LAYOUTS ###
+
+        self.ButtonBox = QHBoxLayout()
+        self.ButtonBox.setAlignment(Qt.AlignLeft)
         self.ButtonBox.addWidget(self.OpenCSVButton)
+        self.ButtonBox.addWidget(self.AddSearchFieldButton)
         self.ButtonBox.addWidget(self.SearchButton)
+        self.ButtonBox.addWidget(self.SetDelimiterButton)
+        self.ButtonBox.addWidget(self.SetEncodingButton)
+        self.ButtonBox.addWidget(self.SetTableFontSizeButton)
+        self.ButtonBox.addWidget(self.HelpButton)
 
         self.SearchBox = QHBoxLayout()
         self.SearchBox.addLayout(self.MainSearchField)
-        self.SearchBox.addLayout(self.ButtonBox)
-        self.SearchBox.addLayout(self.SubSearchField)
-        self.SearchBox.addSpacing(8)
 
         self.MainLayout = QVBoxLayout()
+        self.MainLayout.addLayout(self.ButtonBox)
+        self.MainLayout.addSpacing(10)
         self.MainLayout.addLayout(self.SearchBox)
         self.MainLayout.addSpacing(10)
         self.MainLayout.addWidget(self.ResultArea)
+
         self.setLayout(self.MainLayout)
 
-        # self.openRecent()
-
-    def add_headers_into_cbs(self, SearchBox_items, ParamBox_items):
-        for item in SearchBox_items:
-            self.SearchComboBox.addItem(item)
-        for item in ParamBox_items:
-            self.ParamComboBox.addItem(item)
-        return True
+        self.openRecent()
 
     def search_in(self):
-        self.thread = SearchThread(self, self.CSV)
-        self.thread.searchdone.connect(self.setItemModel, Qt.QueuedConnection )
-        self.thread.start()
+        if self.CSVTable != None:
+            self.thread = SearchThread(self, self.CSVTable)
+            self.thread.searchdone.connect(self.setItemModel, Qt.QueuedConnection )
+            self.thread.start()
+
+    def paintSearchBox(self):
+        for item in self.SearchFields:
+            self.SearchBox.addLayout(item)
+
+    def addSearchField(self):
+        sf = SearchField(self)
+        try:
+            sf.add_headers_into_cb(self.CSVTable.Header)
+        except AttributeError:
+            pass
+        self.SearchFields.append(sf)
+        self.paintSearchBox()
 
     def setItemModel(self, content):
         item_model = QStandardItemModel(parent=self)
@@ -81,10 +153,13 @@ class MainWindow(QWidget):
                 it = QStandardItem(item)
                 row_items.append(it)
             item_model.appendRow(row_items)
-        item_model.setHorizontalHeaderLabels(self.CSV.Header)
+        item_model.setHorizontalHeaderLabels(self.CSVTable.Header)
         self.ResultArea.setModel(item_model)
+
+    def writeRecent(self):
         with open('recent.info', 'w') as r:
-            r.write(self.file)
+            bytes = r.write(self.file)
+        return bytes
 
     def getFileName(self):
         file_obj = QFileDialog.getOpenFileName(parent=self, caption="Open CSV",
@@ -95,10 +170,14 @@ class MainWindow(QWidget):
         self.file = file
         if not self.file:
             self.file = self.getFileName()
-        self.CSV = Table(self.file)
+        try:
+            self.CSVTable = Table(self.file, self.Delimiter, self.Encoding)
+        except Exception as errors:
+            self.showInfo('Error', str(errors))
+            return
         for field in self.SearchFields:
-            field.add_headers_into_cb(self.CSV.Header)
-        self.setItemModel(self.CSV.Table)
+            field.add_headers_into_cb(self.CSVTable.Header)
+        self.setItemModel(self.CSVTable.Table)
 
     def openRecent(self):
         try:
@@ -107,6 +186,44 @@ class MainWindow(QWidget):
             self.openCSV(file)
         except FileNotFoundError:
             return
+
+    def setDelimiter(self):
+        dialog = QInputDialog(self)
+        result = dialog.exec_()
+        if result == QDialog.Accepted:
+            print("QInputDialog(setDelimiter) Button OK")
+            self.Delimiter = dialog.textValue()
+        else:
+            print("QInputDialog(setDelimiter) Button Cancel")
+
+    def setEncoding(self):
+        dialog = QInputDialog(self)
+        result = dialog.exec_()
+        if result:
+            print("QInputDialog(setEncoding) Button OK")
+            self.Encoding = dialog.textValue()
+        else:
+            print("QInputDialog(setEncoding) Button Cancel")
+
+    def setTableFontSize(self):
+        dialog = QInputDialog(self)
+        result = dialog.exec_()
+        if result:
+            print("QInputDialog(setTableFontSize) Button OK")
+            self.TableFontSize = dialog.textValue()
+            self.ResultArea.setStyleSheet("""QTableView{
+                font-size: %spx;
+            }""" %(self.TableFontSize))
+        else:
+            print("QInputDialog(setTableFontSize) Button Cancel")
+
+    def showInfo(self, header, info):
+        infoWindow = QMessageBox.information(self, header, info,
+                                            buttons=QMessageBox.Close,
+                                            defaultButton=QMessageBox.Close)
+
+    def show_help(self):
+        pass
 
 
 class SearchThread(QThread):
@@ -135,13 +252,10 @@ class SearchThread(QThread):
             column = request[0]
             value = request[1]
             table = self.table_obj.searchIn(value, column, table)
+            if table == False:
+                return
         self.searchdone.emit(table)
 
-
-# TODO:   done  QStandartItemModel class with opening file and other stuff
-#               figure  out how to make that model change dynamically
-#               add feature to create and delete SearchInputFields
-#               MAKE EVERYTHING PRETTY!!!
 
 if __name__ == "__main__":
     import sys
@@ -149,11 +263,10 @@ if __name__ == "__main__":
 
     LoadScreen = QSplashScreen(QPixmap("se-loadscreen.jpg"))
     LoadScreen.show()
-    QThread.sleep(1)
+    QThread.sleep(0.3)
     qApp.processEvents()
 
     window = MainWindow()
     window.show()
     LoadScreen.finish(window)
-    #window.openCSV('Mammals.csv')
     sys.exit(app.exec_())

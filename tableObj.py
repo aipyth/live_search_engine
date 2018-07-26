@@ -3,16 +3,18 @@ import csv
 import re
 
 class Table():
-    def __init__(self, file=None):
+    def __init__(self, file, delimiter=None, encoding=None):
 
         self.Table = None
         self.Header = None
         self.EntryFlag = False
 
-        if file != None:
-            self.loadFile(file)
-        else:
-            pass
+        self.file = file
+        self.Delimiter = ',' if delimiter == None else delimiter
+        self.Encoding = 'utf-8'if encoding == None else encoding
+        self.DType = (str)
+
+        self.loadFile()
 
     def __call__(self):
         return self.Table
@@ -26,10 +28,12 @@ class Table():
         return self.Table[offset]
 
 
-    def loadFile(self, file):
-        with open(file, 'r') as f:
-            csv_table = list(csv.reader(f))
-            self.Table = numpy.array(csv_table)
+    def loadFile(self):
+        self.Table = numpy.genfromtxt(self.file, delimiter=self.Delimiter,
+                                encoding=self.Encoding, dtype=self.DType)
+        # with open(self.file, 'r') as f:
+            # csv_table = list(csv.reader(f))
+            # self.Table = numpy.array(csv_table)
         self.Header = self.Table[0]
         self.Table = self.Table[1:]
         self.fixingTypes()
@@ -38,36 +42,13 @@ class Table():
         for index, row in enumerate(self.Table):
             for segment, item in enumerate(row):
                 try:
-                    # int_item = int(item)
-                    # float_item = float(item)
-                    # print(int_item)
-                    # if eval(item) == int_item:
-                    #     self.Table[index, segment] = int_item
-                    # elif eval(item) == float_item:
-                    #     self.Table[index, segment] = float_item
-                    self.Table[index, segment] = float(item)
+                    self.Table[index, segment] = int(item)
                 except ValueError:
-                    pass
+                    try:
+                        self.Table[index, segment] = float(item)
+                    except ValueError:
+                        pass
 
-    def search(self, value, column):
-        if type(column) != int:
-            try:
-                column = list(self.Header).index(column)
-            except ValueError:
-                return False
-
-        search_operator, search_number = self.parseValue(value)
-
-        if search_operator:
-            pickup_column = self.Table[:, column]
-            # search_bool_result = "pickup_column {} search_number".format(search_operator)
-            search_bool = pickup_column == search_number
-            search_bool = self._search(pickup_column, search_bool,
-                                    search_number, search_operator)
-            result = self.Table[search_bool]
-
-            return result
-        return False
 
     def searchIn(self, value, column, table):
         if type(column) != int:
@@ -75,8 +56,10 @@ class Table():
                 column = list(self.Header).index(column)
             except ValueError:
                 return False
-
-        search_operator, search_number = self.parseValue(value)
+        try:
+            search_operator, search_number = self.parseValue(value)
+        except IndexError:
+            return False
 
         if search_operator:
             pickup_column = table[:, column]
@@ -121,22 +104,36 @@ class Table():
         return search_bool
 
     def parseValue(self, value):
-        f_symbols = ['<', '>', '!', '=']
-        try:
-            int(value[0])
-            return (None, value)
-        except ValueError:
-            try:
-                int(value[1])
-                if value[0] == '=':
-                    return ('==', value[1:])
+        operators_list = ["!", "<", ">", "=", "<=", ">="]
+        if value[0] == "!":
+            return ("!=", value[1:])
+        elif value[0] == "<" or value[0] == ">":
+            if value[1] != "=":
                 return (value[0], value[1:])
-            except ValueError:
-                if value[1] != '=':
-                    if value[0] == '=':
-                        return ('==', value[1:])
-                    return (value[0], value[1:])
+            else:
                 return (value[:2], value[2:])
+        elif value[0] == "=":
+            return ("==", value[1:])
+        else:
+            return (None, value)
+
+
+        # f_symbols = ['<', '>', '!', '=']
+        # try:
+        #     int(value[0])
+        #     return (None, value)
+        # except ValueError:
+        #     try:
+        #         int(value[1])
+        #         if value[0] == '=':
+        #             return ('==', value[1:])
+        #         return (value[0], value[1:])
+        #     except ValueError:
+        #         if value[1] != '=':
+        #             if value[0] == '=':
+        #                 return ('==', value[1:])
+        #             return (value[0], value[1:])
+        #         return (value[:2], value[2:])
 
 
 if __name__ == "__main__":
@@ -146,7 +143,9 @@ if __name__ == "__main__":
     # print(table.Header)
     # table.search('3.0', 3)
     # print(table.search('!=3.0', -1))
-    print(table.searchIn('=1', -1))
+    # print(table.searchIn('=1', -1))
+    print(table.Table)
+    print(table.parseValue('Cat'))
 
     # size = table[:, 3:]
     # print(size)
