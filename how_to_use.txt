@@ -1,0 +1,5 @@
+Use:
+	Just type without any operator to search if the table contains the one, you typed
+	! - for searching all item BUT NOT THE ONE you type
+        = - for searching the exactly the one you typed
+        < > <= >= - for searching less, bigger, less then, bigger than one value you type

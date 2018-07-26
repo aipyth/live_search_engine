@@ -54,6 +54,7 @@ class SearchField(QHBoxLayout):
         del self.parentWindow.SearchFields[self_index]
 
     def add_headers_into_cb(self, content):
+        self.ParamComboBox.clear()
         for item in content:
             self.ParamComboBox.addItem(item)
 
@@ -89,9 +90,6 @@ class MainWindow(QWidget):
         self.SetTableFontSizeButton = QPushButton('Set Font Size for Table')
         self.SetTableFontSizeButton.clicked.connect(self.setTableFontSize)
 
-        self.HelpButton = QPushButton('Help')
-        self.HelpButton.clicked.connect(self.show_help)
-
         self.ResultArea = QTableView()
         self.ResultArea.setStyleSheet("""QTableView{
             font-size: %spx;
@@ -110,7 +108,6 @@ class MainWindow(QWidget):
         self.ButtonBox.addWidget(self.SetDelimiterButton)
         self.ButtonBox.addWidget(self.SetEncodingButton)
         self.ButtonBox.addWidget(self.SetTableFontSizeButton)
-        self.ButtonBox.addWidget(self.HelpButton)
 
         self.SearchBox = QHBoxLayout()
         self.SearchBox.addLayout(self.MainSearchField)
@@ -155,6 +152,8 @@ class MainWindow(QWidget):
             item_model.appendRow(row_items)
         item_model.setHorizontalHeaderLabels(self.CSVTable.Header)
         self.ResultArea.setModel(item_model)
+
+        self.writeRecent()
 
     def writeRecent(self):
         with open('recent.info', 'w') as r:
@@ -221,10 +220,6 @@ class MainWindow(QWidget):
         infoWindow = QMessageBox.information(self, header, info,
                                             buttons=QMessageBox.Close,
                                             defaultButton=QMessageBox.Close)
-
-    def show_help(self):
-        pass
-
 
 class SearchThread(QThread):
     searchdone = pyqtSignal(numpy.ndarray)
