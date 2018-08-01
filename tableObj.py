@@ -66,7 +66,7 @@ class Table():
         return l
 
     def searchIn(self, value, column, table, window, requests):
-        window.updateStatusLabel("Searching...")
+        window.updatelabel.emit("Searching...")
         self.Interrupt = False
         self.table_ = table
 
@@ -98,21 +98,20 @@ class Table():
                                         window, requests)
         print("Search time ", time() - st)
         result = self.table_[search_bool]
-        window.updateStatusLabel("Search done!")
+        window.updatelabel.emit("Search done!")
         return result
 
     def _search(self, pickup_column, search_bool, expression, operator, window, requests):
         len_pickup_col = len(pickup_column)
-        print('ahd here a i am')
         for counter, value in enumerate(pickup_column):
             # if self.Interrupt == True:
             #     return False
 
             percent = (counter * 100 / len_pickup_col) / requests
-            window.updateProgressBar(percent)
+            window.percentdone.emit(percent)
             dots = int(time.time()) % 3
             mssg = "Searching{}".format('.' * dots)
-            window.updateStatusLabel(mssg)
+            window.updatelabel.emit(mssg)
 
             value, expression = self.returnRealValues(value, expression)
 

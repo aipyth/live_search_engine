@@ -65,6 +65,17 @@ class SearchField(QHBoxLayout):
             self.ParamComboBox.addItem(item)
         self.ParamComboBox.setCurrentIndex(self.index)
 
+class SettingsWindow(QWidget):
+    def __init__(self):
+        QWidget.__init__(self)
+        self.setWindowFlags(Qt.Tool)
+        self.setWindowTitle('Settings')
+        self.setWindowModality(Qt.WindowModal)
+
+        self.DelimiterLabel
+        self.EncodingLabel
+        self.FontSizeLabel
+
 class ColumnsWindow(QWidget):
     def __init__(self, mainwindow):
         QWidget.__init__(self, parent=mainwindow)
@@ -321,7 +332,9 @@ class MainWindow(QWidget):
     def start_searching_thread(self):
         self.thread = SearchThread(self, self.CSVTable)
         self.RunningThreads['Search'] = self.thread
-        self.thread.searchdone.connect(self.endingSearch)#, Qt.AutoConnection )
+        self.thread.searchdone.connect(self.endingSearch, Qt.AutoConnection )
+        self.thread.percentdone.connect(self.updateProgressBar, Qt.AutoConnection )
+        self.thread.updatelabel.connect(self.updateStatusLabel, Qt.AutoConnection )
         self.thread.collect()
         self.thread.start()
 
@@ -464,6 +477,8 @@ class SetModelThread(QThread):
 
 class SearchThread(QThread):
     searchdone = pyqtSignal(np.ndarray)
+    percentdone = pyqtSignal(int)
+    updatelabel = pyqtSignal(str)
     def __init__(self, window, table_obj):
         QThread.__init__(self)
         self.table_obj = table_obj
@@ -489,7 +504,7 @@ class SearchThread(QThread):
             column, value = request[0], request[1]
             requests = len(self.requests)
             self.table_obj.Interrupt = False
-            table = self.table_obj.searchIn(value, column, table, self.window, requests)
+            table = self.table_obj.searchIn(value, column, table, self, requests)
             # if table == False:
             #     return
         print("Ended searching")
@@ -499,8 +514,8 @@ class SearchThread(QThread):
     def end(self):
         self.table_obj.Interrupt = True
         self.window.RunningThreads['Search'] = None
-        # self.exit()
-        # self.deleteLater()
+        self.exit()
+        self.deleteLater()
 
 class NewSearchThread(QThread): # here write a support for or, and, ()
                                 # and replace with SearchThread
