@@ -1,13 +1,14 @@
 import numpy
 import csv
 import re
+import time
 
 class Table():
     def __init__(self, file, delimiter=None, encoding=None):
 
         self.Table = None
         self.Header = None
-        self.EntryFlag = False
+        self.Interrupt = False
 
         self.file = file
         self.Delimiter = ',' if delimiter == None else delimiter
@@ -29,16 +30,16 @@ class Table():
 
 
     def loadFile(self):
-        self.Table = numpy.genfromtxt(self.file, delimiter=self.Delimiter,
-                                encoding=self.Encoding, dtype=self.DType)
-        # with open(self.file, 'r') as f:
-            # csv_table = list(csv.reader(f))
-            # self.Table = numpy.array(csv_table)
-        self.Header = self.Table[0]
-        self.Table = self.Table[1:]
-        self.fixingTypes()
+        table = []
+        with open(self.file, 'r') as f:
+            csv_table = list(csv.reader(f, delimiter=self.Delimiter))
+            self.table = numpy.array(csv_table, dtype=str)
+        self.Header = self.table[0]
+        self.Table = self.table[1:]
+        # self.updateDataTypes()
 
-    def fixingTypes(self):
+    def updateDataTypes(self):  # for faster search
+
         for index, row in enumerate(self.Table):
             for segment, item in enumerate(row):
                 try:
@@ -60,47 +61,60 @@ class Table():
                 pass
         return var
 
-    def returnRealVariables(self, *args):
+    def returnRealValues(self, *args):
         l = [self.retRealVar(item) for item in args]
         return l
 
-    def searchIn(self, value, column, table=None):
-        self.table = table
-        if type(column) != int:
-            try:
-                column = list(self.Header).index(column)
-            except ValueError:
-                return False
+    def searchIn(self, value, column, table, window, requests):
+        window.updateStatusLabel("Searching...")
+        self.Interrupt = False
+        self.table_ = table
+
+        # if type(column) != int:
+        #     try:
+        #         column = list(self.Header).index(column)
+        #     except ValueError:
+        #         return False
         try:
-            search_operator, search_number = self.parseValue(value)
+            search_operator, search_value = self.parseValue(value)
         except IndexError:
-            search_operator, search_number = None, value
+            search_operator, search_value = None, value
 
+        search_value = self.returnRealValues(search_value)[0]
+        print(search_operator, search_value)
 
-        pickup_column = self.table[:, column]
-        search_bool = pickup_column == search_number
-        search_bool = self._search(pickup_column, search_bool,
-                                search_number, search_operator)
-        result = self.table[search_bool]
+        pickup_column = self.table_[:, column]
+        search_bool = numpy.full(pickup_column.shape, True)
+        from time import time
+        st = time()
+        try:
+            pickup_column = numpy.array(pickup_column, dtype=float)
+            search_operator = '==' if search_operator == None else search_operator
+            expression = "pickup_column {operator} search_value".format(operator=search_operator)
+            search_bool = eval(expression)
+        except ValueError:
+            search_bool = self._search(pickup_column, search_bool,
+                                        search_value, search_operator,
+                                        window, requests)
+        print("Search time ", time() - st)
+        result = self.table_[search_bool]
+        window.updateStatusLabel("Search done!")
         return result
 
-    def _search(self, pickup_column, search_bool, expression, operator):
+    def _search(self, pickup_column, search_bool, expression, operator, window, requests):
+        len_pickup_col = len(pickup_column)
+        print('ahd here a i am')
         for counter, value in enumerate(pickup_column):
-            # try:
-            #     value = float(value)
-            #     try:
-            #         expression = int(expression)
-            #     except ValueError:
-            #         try:
-            #             expression = float(expression)
-            #         except ValueError:
-            #             expression_is_string = True
-            # except ValueError:
-            #     pass
-            # print(pickup_column)
+            # if self.Interrupt == True:
+            #     return False
 
-            value, expression = self.returnRealVariables(value, expression)
-            print("'{}'".format(value), expression)
+            percent = (counter * 100 / len_pickup_col) / requests
+            window.updateProgressBar(percent)
+            dots = int(time.time()) % 3
+            mssg = "Searching{}".format('.' * dots)
+            window.updateStatusLabel(mssg)
+
+            value, expression = self.returnRealValues(value, expression)
 
             if operator == None:
                 exp_to_eval = "\"{}\".lower() in value.lower()".format(expression)
@@ -143,19 +157,6 @@ class Table():
             return (None, value)
 
 
-
 if __name__ == "__main__":
     table = Table('Mammals.csv')
-
-    # print(table.parseValue('>38.412342'))
-    # print(table.Header)
-    # table.search('3.0', 3)
-    # print(table.search('!=3.0', -1))
-    print(table.searchIn('', 0))
-    # print(table.Table)
-    # print(table.parseValue('<90'))
-    # print(type(table.retRealVar('5')))
-    # print(table.returnRealVariables('1', '1.0', 2, 4, 'string'))
-
-    # size = table[:, 3:]
-    # print(size)
+    # table.searchIn()
