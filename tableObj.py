@@ -31,7 +31,7 @@ class Table():
 
     def loadFile(self):
         table = []
-        with open(self.file, 'r') as f:
+        with open(self.file, 'r', encoding=self.Encoding) as f:
             csv_table = list(csv.reader(f, delimiter=self.Delimiter))
             self.table = numpy.array(csv_table, dtype=str)
         self.Header = self.table[0]

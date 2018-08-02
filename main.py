@@ -7,6 +7,7 @@ from time import time
 
 import numpy as np
 import csv
+import json
 
 from tableObj import Table
 
@@ -29,7 +30,8 @@ class SearchField(QHBoxLayout):
         self.ParamComboBox = QComboBox()
         self.ParamInput = QLineEdit()
 
-        self.ParamInput.textChanged.connect(self.parentWindow.search_in)
+        if self.parentWindow.SettingsW.Settings.LiveSearchFlag:
+            self.ParamInput.textChanged.connect(self.parentWindow.search_in)
         self.DeleteButton.clicked.connect(self.delete)
         self.DeleteButton.setStyleSheet("""LabelLikeButton {
             font-family: sans-serif;
@@ -58,6 +60,12 @@ class SearchField(QHBoxLayout):
         self.index = self.parentWindow.SearchFields.index(self)
         del self.parentWindow.SearchFields[self.index]
 
+    def update_(self):
+        if self.parentWindow.SettingsW.Settings.LiveSearchFlag:
+            self.ParamInput.textChanged.connect(self.parentWindow.search_in)
+        else:
+            self.ParamInput.textChanged.disconnect(self.parentWindow.search_in)
+
     def add_headers_into_cb(self, content):
         self.index = self.parentWindow.SearchFields.index(self)
         self.ParamComboBox.clear()
@@ -66,15 +74,94 @@ class SearchField(QHBoxLayout):
         self.ParamComboBox.setCurrentIndex(self.index)
 
 class SettingsWindow(QWidget):
-    def __init__(self):
-        QWidget.__init__(self)
+    def __init__(self, parent):
+        QWidget.__init__(self, parent)
         self.setWindowFlags(Qt.Tool)
         self.setWindowTitle('Settings')
         self.setWindowModality(Qt.WindowModal)
+        self.resize(400, 200)
 
-        self.DelimiterLabel
-        self.EncodingLabel
-        self.FontSizeLabel
+        self.parent = parent
+        from settings import Settings
+        self.Settings = Settings()
+
+        self.DelimiterLabel = QLabel('Delimiter')
+        self.EncodingLabel = QLabel('Encoding')
+        self.FontSizeLabel = QLabel('FontSize')
+
+        self.DelimiterLine = QLineEdit()
+        self.DelimiterLine.setText(self.Settings.Delimiter)
+        self.EncodingLine = QLineEdit()
+        self.EncodingLine.setText(self.Settings.Encoding)
+        self.FontSizeLine = QLineEdit()
+        self.FontSizeLine.setText(self.Settings.FontSize)
+        self.FontSizeLine.setValidator(QIntValidator(0, 100, parent=self))
+
+        self.LiveSearchCheckBox = QCheckBox('Live Search (the function can be unstable and crash the programm)')
+        self.LiveSearchCheckBox.setCheckState(2 if self.Settings.LiveSearchFlag else 0)
+
+        self.OkButton = QPushButton('OK')
+        # self.OkButton.setFixedWidth(35)
+        self.OkButton.clicked.connect(self.save_changes)
+        self.OkButton.setStyleSheet("""QPushButton{
+            background-color: #319149;
+            color: #eee;
+        }""")
+        self.CancelButton = QPushButton('Cancel')
+        # self.CancelButton.setFixedWidth(48)
+        self.CancelButton.clicked.connect(self.hide)
+        self.CancelButton.setStyleSheet("""QPushButton{
+            background-color: #882d2d;
+            color: #eee;
+        }""")
+        self.DefaultButton = QPushButton('Default')
+        self.DefaultButton.clicked.connect(self.set_default)
+
+        self.FieldsGrid = QGridLayout()
+        self.FieldsGrid.addWidget(self.DelimiterLabel, 0, 0)
+        self.FieldsGrid.addWidget(self.EncodingLabel, 1, 0)
+        self.FieldsGrid.addWidget(self.FontSizeLabel, 2, 0)
+
+        self.FieldsGrid.addWidget(self.DelimiterLine, 0, 1)
+        self.FieldsGrid.addWidget(self.EncodingLine, 1, 1)
+        self.FieldsGrid.addWidget(self.FontSizeLine, 2, 1)
+
+        self.ButtonsLayout = QHBoxLayout()
+        self.ButtonsLayout.addWidget(self.DefaultButton, alignment=Qt.AlignLeft)
+        self.ButtonsLayout2 = QHBoxLayout()
+        self.ButtonsLayout2.addWidget(self.OkButton, alignment=Qt.AlignRight)
+        self.ButtonsLayout2.addWidget(self.CancelButton, alignment=Qt.AlignRight)
+        self.ButtonsLayout.addLayout(self.ButtonsLayout2)
+
+        self.MainLayout = QVBoxLayout()
+        self.MainLayout.addLayout(self.FieldsGrid)
+        self.MainLayout.addWidget(self.LiveSearchCheckBox)
+        self.MainLayout.addSpacing(15)
+        self.MainLayout.addLayout(self.ButtonsLayout)
+
+        self.setLayout(self.MainLayout)
+
+    def save_changes(self):
+        self.Settings.LiveSearchFlag = bool(self.LiveSearchCheckBox.checkState())
+        self.Settings.Delimiter = self.DelimiterLine.text()
+        self.Settings.Encoding = self.EncodingLine.text()
+        self.Settings.FontSize = self.FontSizeLine.text()
+        self.parent.updatefont.emit()
+        self.Settings.save()
+        for field in self.parent.SearchFields:
+            field.update_()
+        self.hide()
+
+    def set_default(self):
+        self.DelimiterLine.setText(',')
+        self.EncodingLine.setText('utf-8')
+        self.FontSizeLine.setText('16')
+        self.LiveSearchCheckBox.setChecked(True)
+
+        self.Settings.LiveSearchFlag = bool(self.LiveSearchCheckBox.checkState())
+        self.Settings.Delimiter = self.DelimiterLine.text()
+        self.Settings.Encoding = self.EncodingLine.text()
+        self.Settings.FontSize = self.FontSizeLine.text()
 
 class ColumnsWindow(QWidget):
     def __init__(self, mainwindow):
@@ -212,21 +299,28 @@ class ColumnsWindow(QWidget):
         return sli_all
 
 class MainWindow(QWidget):
+    updatefont = pyqtSignal()
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.setWindowTitle('Search Engine')
-
         self.setWindowFlags(Qt.Window)
         self.setWindowTitle('Search Engine')
         self.resize(1200, 800)
 
+        self.updatefont.connect(self.updateTableFont)
+        self.SettingsW = SettingsWindow(self)
+
         self.CSVTable = None
-        self.Delimiter = ','
-        self.Encoding = 'utf-8'
-        self.TableFontSize = '15'
+        self.Delimiter = self.SettingsW.Settings.Delimiter
+        self.Encoding = self.SettingsW.Settings.Encoding
+        self.TableFontSize = self.SettingsW.Settings.FontSize
         self.SearchFields = []   # this array will contain SearchFileds objects
         self.RunningThreads = {'Search': None} # contains list of threads running,
                                 # there always must be only 1 thread in searching!!!
+        self.DataInformation = {'lastFile': None,
+                                'lastSFCol': [],
+                                'lastSFReq': [],
+                                'lastTableCol': []}
 
         self.OpenCSVButton = QPushButton('Open CSV')
         self.OpenCSVButton.clicked.connect(self.openCSV)
@@ -240,14 +334,17 @@ class MainWindow(QWidget):
         self.SearchButton = QPushButton('Search')
         self.SearchButton.clicked.connect(self.search_in)
 
-        self.SetDelimiterButton = QPushButton('Set Delimiter')
-        self.SetDelimiterButton.clicked.connect(self.setDelimiter)
+        self.SettingsButton = QPushButton('Settings')
+        self.SettingsButton.clicked.connect(self.SettingsW.show)
 
-        self.SetEncodingButton = QPushButton('Set Encoding')
-        self.SetEncodingButton.clicked.connect(self.setEncoding)
-
-        self.SetTableFontSizeButton = QPushButton('Set Font Size for Table')
-        self.SetTableFontSizeButton.clicked.connect(self.setTableFontSize)
+        # self.SetDelimiterButton = QPushButton('Set Delimiter')
+        # self.SetDelimiterButton.clicked.connect(self.setDelimiter)
+        #
+        # self.SetEncodingButton = QPushButton('Set Encoding')
+        # self.SetEncodingButton.clicked.connect(self.setEncoding)
+        #
+        # self.SetTableFontSizeButton = QPushButton('Set Font Size for Table')
+        # self.SetTableFontSizeButton.clicked.connect(self.setTableFontSize)
 
         self.ResultArea = QTableView()
         self.ResultArea.setStyleSheet("""QTableView{
@@ -280,9 +377,10 @@ class MainWindow(QWidget):
         self.ButtonBox.addWidget(self.SetColumnsButton)
         self.ButtonBox.addWidget(self.AddSearchFieldButton)
         self.ButtonBox.addWidget(self.SearchButton)
-        self.ButtonBox.addWidget(self.SetDelimiterButton)
-        self.ButtonBox.addWidget(self.SetEncodingButton)
-        self.ButtonBox.addWidget(self.SetTableFontSizeButton)
+        self.ButtonBox.addWidget(self.SettingsButton)
+        # self.ButtonBox.addWidget(self.SetDelimiterButton)
+        # self.ButtonBox.addWidget(self.SetEncodingButton)
+        # self.ButtonBox.addWidget(self.SetTableFontSizeButton)
 
         self.SearchBox = QHBoxLayout()
         self.SearchBox.addLayout(self.MainSearchField)
@@ -304,12 +402,18 @@ class MainWindow(QWidget):
 
         self.setLayout(self.MainLayout)
 
+        self.openDataFile()
         self.openRecent()
 
     def resizeEvent(self, qresizeEvent):
         self.ProgressBar_width = qresizeEvent.size().width() // 2 - 30
         self.ProgressBar.setFixedSize(self.ProgressBar_width, 16)
         QWidget.resizeEvent(self, qresizeEvent)
+
+    def updateTableFont(self):
+        self.ResultArea.setStyleSheet("""QTableView{
+            font-size: %spx;
+        }""" %(self.SettingsW.Settings.FontSize))
 
     def updateProgressBar(self, value):
         self.ProgressBar.setValue(value)
@@ -339,7 +443,6 @@ class MainWindow(QWidget):
         self.thread.start()
 
     def endingSearch(self, data):
-        print("heaaaaaaaaaare")
         # self.RunningThreads['Search'].deleteLater()
         self.RunningThreads['Search'] = None
 
@@ -364,13 +467,6 @@ class MainWindow(QWidget):
         self.resultsThread.statussignal.connect(self.updateProgressBar)
         self.resultsThread.start()
 
-        self.writeRecent()
-
-    def writeRecent(self):
-        with open('recent.info', 'w') as r:
-            bytes = r.write(self.file)
-        return bytes
-
     def getFileName(self):
         file_obj = QFileDialog.getOpenFileName(parent=self, caption="Open CSV",
                                         filter="CSV (*.csv)")
@@ -384,7 +480,8 @@ class MainWindow(QWidget):
         if not self.file:
             self.file = self.getFileName()
         try:
-            self.CSVTable = Table(self.file, self.Delimiter, self.Encoding)
+            self.CSVTable = Table(self.file, self.SettingsW.Settings.Delimiter,
+            self.SettingsW.Settings.Encoding)
         except Exception as errors:
             self.showInfo('Error', str(errors))
             return
@@ -394,19 +491,44 @@ class MainWindow(QWidget):
 
         print("Open file time - ", time() - st)
 
-    def openRecent(self):
+    def openDataFile(self):
         try:
-            with open('recent.info', 'r') as r:
-                file = r.read()
-            self.openCSV(file)
+            with open('recent.json', 'r') as fp:
+                self.DataInformation = json.load(fp)
         except FileNotFoundError:
+            pass
+
+    def writeRecentFile(self):
+        with open('recent.json', 'w') as fp:
+            json.dump(self.DataInformation, fp)
+
+    def openRecent(self):           # opens recent csv table,
+                                    # name of file is taken from self.DataInformation
+        file = self.DataInformation['lastFile']
+        if file == None:
             return
+        self.openCSV(file)
 
-    def closeEvent(self, event):
-        # here write func to save settings on quit
-        self.close()
+    def closeEvent(self, event):    # is called when the programm closes
+        try:
+            self.saveSearchParam()
+            self.writeRecentFile()
+        except AttributeError:
+            pass
+        finally:
+            self.close()
 
-    def setDelimiter(self):
+    def saveSearchParam(self):
+        table_col = self.CSVTable.Header
+        self.DataInformation['lastTableCol'] = list(table_col)
+        self.DataInformation['lastFile'] = self.file
+        for field in self.SearchFields:
+            col = field.ParamComboBox.currentIndex()
+            req = field.ParamInput.text()
+            self.DataInformation['lastSFCol'].append(col)
+            self.DataInformation['lastSFReq'].append(req)
+
+    def setDelimiter(self): # Dialog Window to set a delimiter
         dialog = QInputDialog(self)
         result = dialog.exec_()
         if result == QDialog.Accepted:
@@ -415,7 +537,7 @@ class MainWindow(QWidget):
         else:
             print("QInputDialog(setDelimiter) Button Cancel")
 
-    def setEncoding(self):
+    def setEncoding(self):  # Dialog window to set a encoding
         dialog = QInputDialog(self)
         result = dialog.exec_()
         if result:
@@ -424,7 +546,7 @@ class MainWindow(QWidget):
         else:
             print("QInputDialog(setEncoding) Button Cancel")
 
-    def setTableFontSize(self):
+    def setTableFontSize(self): # Dialog window to set a size of font
         dialog = QInputDialog(self)
         result = dialog.exec_()
         if result:
@@ -436,7 +558,7 @@ class MainWindow(QWidget):
         else:
             print("QInputDialog(setTableFontSize) Button Cancel")
 
-    def showInfo(self, header, info):
+    def showInfo(self, header, info):   # just dialog window to show the given info
         infoWindow = QMessageBox.information(self, header, info,
                                             buttons=QMessageBox.Close,
                                             defaultButton=QMessageBox.Close)
@@ -517,7 +639,7 @@ class SearchThread(QThread):
         self.exit()
         self.deleteLater()
 
-class NewSearchThread(QThread): # here write a support for or, and, ()
+class NewSearchThread(QThread): # TODO: here write a support for or, and, ()
                                 # and replace with SearchThread
     searchdone = pyqtSignal(np.ndarray)
     def __init__(self, window, table_obj):
@@ -552,6 +674,7 @@ if __name__ == "__main__":
     qApp.processEvents()
 
     window = MainWindow()
+    window.setWindowIcon(QIcon('se-icon.png'))
     window.show()
     LoadScreen.finish(window)
     sys.exit(app.exec_())
