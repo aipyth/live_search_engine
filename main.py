@@ -507,7 +507,44 @@ class MainWindow(QWidget):
         file = self.DataInformation['lastFile']
         if file == None:
             return
-        self.openCSV(file)
+
+        from time import time
+        st = time()
+
+        self.file = file
+        if not self.file:
+            self.file = self.getFileName()
+        try:
+            self.CSVTable = Table(self.file, self.SettingsW.Settings.Delimiter,
+            self.SettingsW.Settings.Encoding)
+        except Exception as errors:
+            self.showInfo('Error', str(errors))
+            return
+
+        # self.CSVTable.Header = np.array(self.DataInformation['lastTableCol'])
+
+        for field in self.SearchFields:
+            field.add_headers_into_cb(self.CSVTable.Header)
+
+        columns = self.DataInformation['lastTableCol']
+        table = self.CSVTable
+        indexes = [np.where(table.table == col_name)[1][0] for col_name in columns]
+        pick_up_col = [table.table[:,index] for index in indexes]
+        table.Table = np.column_stack(pick_up_col)[1:]
+        table.Header = np.array(columns)
+        self.setItemModel(table.Table)
+
+        number_of_col = len(self.DataInformation['lastSFCol'])
+        for iter in range(number_of_col):
+            if iter == 0: continue
+            self.addSearchField()
+
+        for field in self.SearchFields:
+            field.ParamInput.setText()
+
+        # self.setItemModel(self.CSVTable.Table)
+
+        print("Open file time - ", time() - st)
 
     def closeEvent(self, event):    # is called when the programm closes
         try:
@@ -525,6 +562,8 @@ class MainWindow(QWidget):
         for field in self.SearchFields:
             col = field.ParamComboBox.currentIndex()
             req = field.ParamInput.text()
+            self.DataInformation['lastSFCol'] = []
+            self.DataInformation['lastSFReq'] = []
             self.DataInformation['lastSFCol'].append(col)
             self.DataInformation['lastSFReq'].append(req)
 
