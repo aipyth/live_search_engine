@@ -507,7 +507,38 @@ class MainWindow(QWidget):
         file = self.DataInformation['lastFile']
         if file == None:
             return
-        self.openCSV(file)
+
+        from time import time
+        st = time()
+
+        self.file = file
+        if not self.file:
+            self.file = self.getFileName()
+        try:
+            self.CSVTable = Table(self.file, self.SettingsW.Settings.Delimiter,
+            self.SettingsW.Settings.Encoding)
+        except Exception as errors:
+            self.showInfo('Error', str(errors))
+            return
+
+        for field in self.SearchFields:
+            field.add_headers_into_cb(self.CSVTable.Header)
+
+        columns = self.DataInformation['lastTableCol']
+        table = self.CSVTable
+        indexes = [np.where(table.table == col_name)[1][0] for col_name in columns]
+        pick_up_col = [table.table[:,index] for index in indexes]
+        table.Table = np.column_stack(pick_up_col)[1:]
+        table.Header = np.array(columns)
+        self.setItemModel(table.Table)
+        
+        for item in self.SearchFields:
+            try:
+                item.add_headers_into_cb(table.Header)
+            except AttributeError:
+                pass
+
+        print("Open file time - ", time() - st)
 
     def closeEvent(self, event):    # is called when the programm closes
         try:
@@ -639,7 +670,7 @@ class SearchThread(QThread):
         self.exit()
         self.deleteLater()
 
-class NewSearchThread(QThread): # TODO: here write a support for or, and, ()
+class NewSearchThread(QThread): # TODO: here write a support for and, or, ()
                                 # and replace with SearchThread
     searchdone = pyqtSignal(np.ndarray)
     def __init__(self, window, table_obj):
