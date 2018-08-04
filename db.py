@@ -1,87 +1,117 @@
-# importing libs
 import sys
-from PyQt5.QtWidgets import (QWidget, QLineEdit,
-                             QApplication, QTableView,
-                             QVBoxLayout, QHBoxLayout,
-                             QPushButton, QHeaderView,
-                             QGridLayout, QCheckBox,
-                             QFontDialog, QToolTip)
-from PyQt5.QtGui import QFont
-from PyQt5.QtCore import Qt
+
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from PyQt5 import QtSql
 from shlex import split
 
-# main application class
-class Elephant_Finder(QWidget):
+class MySqlModel(QtSql.QSqlQueryModel):
 
-    # class initialization
+    def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignCenter
+        return QtSql.QSqlQueryModel.data(self, index, role)
+
+class MainWindow(QWidget):
     def __init__(self):
-        super().__init__()
-
-        self.initUI()
-
-    # initializing widgets
-    def initUI(self):
+        QWidget.__init__(self)
+        self.resize(1500, 900)
         self.id = 0
-        # description of the geometry of the window and title
-        self.setGeometry(100, 150, 1200, 600)
-        self.setWindowTitle('Elephant Finder')
-        # call database creation function
-        self.createParamsDB()
-        self.createDB()
-        # displaying window elements
-        self.setLayout(self.myLayout())
-        self.show()
 
-    # customize the display of window elements
-    def myLayout(self):
-        # creating a grid
-        grid = QGridLayout()
-        spacing = 5
-        grid.setSpacing(spacing)
-        # Adding a table mapping to a database
-        grid.addLayout(self.sqlLayout(), 2, 0, 1, 0)
-        # creating a switch
+        self.createDB()
+        self.ColumnsWindow = ColumnsWindow(self)
+
+
+        self.View = QTableView()
+        self.setTable()
+        self.TableFont = self.View.property('font')
+
+        self.OpenButton = QPushButton('Open DB')
+        self.OpenButton.clicked.connect(self.createDB)
+
+        self.SetColumnsButton = QPushButton('Columns')
+        self.SetColumnsButton.clicked.connect(self.ColumnsWindow.show)
+
+        self.FontButton = QPushButton('Font')
+        self.FontButton.clicked.connect(self.fontDialog)
+
+        # LAYOUTS
+        self.SearchFieldsGrid = QGridLayout()
+        self.makeSearchFieldsGrid()
+
+        self.ButtonBox = QHBoxLayout()
+        self.ButtonBox.setAlignment(Qt.AlignLeft)
+        self.ButtonBox.addWidget(self.OpenButton)
+        self.ButtonBox.addWidget(self.SetColumnsButton)
+        self.ButtonBox.addWidget(self.FontButton)
+
+        self.mainLayout = QVBoxLayout()
+        self.mainLayout.addLayout(self.ButtonBox)
+        self.mainLayout.addLayout(self.SearchFieldsGrid)
+        self.mainLayout.addWidget(self.View)
+
+        self.setLayout(self.mainLayout)
+
+    def setTable(self):
+        # self.QModel = QtSql.QSqlQueryModel()
+        self.QModel = MySqlModel()
+        self.SearchQuery = "select {} from usda".format(self.Columns)
+        self.QModel.setQuery(self.SearchQuery, self.DB)
+        self.View.setModel(self.QModel)
+
+        header = self.View.horizontalHeader()
+        for i in range(len(header)):
+            header.setSectionResizeMode(i, QHeaderView.Stretch)
+        self.View.resizeRowsToContents()
+        self.View.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.View.clicked.connect(self.copyText)
+
+    def makeSearchFieldsGrid(self):
+        self.SearchFieldsGrid.setSpacing(5)
+
         self.cb = QCheckBox(self)
         self.cb.stateChanged.connect(self.changeQuery)
-        grid.addWidget(self.cb, 1, 0)
-        grid.setColumnMinimumWidth(0, 30)
-        # create input fields
-        n = len(self.headerList)
-        qwidth = [self.view.columnWidth(i) for i in range(n)]
-        #print(qwidth)
+        self.SearchFieldsGrid.addWidget(self.cb, 1, 0)
+        self.SearchFieldsGrid.setColumnMinimumWidth(0, 30)
+
+        n = len(self.Headers)
+        qwidth = [self.View.columnWidth(i) for i in range(n)]
+        print(qwidth)
         self.qles = [None for i in range(n)]
         for i in range(0, n):
             self.qles[i] = QLineEdit(self)
-            self.qles[i].setObjectName(self.headerList[i])
+            self.qles[i].setObjectName(self.HeaderList[i])
             self.qles[i].textChanged[str].connect(self.setSearchQuery)
-            grid.addWidget(self.qles[i], 1, i + 1)
-            grid.setColumnMinimumWidth(i + 1, qwidth[i] - spacing)
-        # create buttons
-        comboButton = QPushButton('font')
-        comboButton.clicked.connect(self.fontDialog)
-        saveButton = QPushButton('save')
-        saveButton.clicked.connect(self.saveParams)
-        loadButton = QPushButton('load')
-        loadButton.clicked.connect(self.loadParams)
-        buttonLayout = QHBoxLayout()
-        buttonLayout.addStretch(1)
-        buttonLayout.addWidget(comboButton)
-        buttonLayout.addWidget(saveButton)
-        buttonLayout.addWidget(loadButton)
-        grid.addLayout(buttonLayout, 0, 0, 1, n+1)
-        self.loadParams()
-        loadButton.setToolTip('{}'.format(', '.join([i[0] + ' = ' + i[1] for i in self.loadHint])))
-        # return of the finished grid
-        return grid
+            self.SearchFieldsGrid.addWidget(self.qles[i], 1, i + 1)
+            self.SearchFieldsGrid.setColumnMinimumWidth(i + 1, qwidth[i] - 5)
 
-    # remembering the status of the switch after pressing and updating the table
+    def createDB(self):
+        # binding to an existing database
+        self.FilePath = self.getFileName()
+        self.DB = QtSql.QSqlDatabase.addDatabase('QSQLITE', "usda")
+
+        # self.DB.setDatabaseName('usda.db')
+        self.DB.setDatabaseName(self.FilePath)
+        self.DB.open()
+
+        # getting a list of Headers
+        self.query = QtSql.QSqlQuery(db = self.DB)
+        self.query.exec_("PRAGMA table_info(usda)")
+
+        # filling the list of headings
+        self.HeaderList = []
+        while self.query.next():
+            self.HeaderList.append(self.query.value(1))
+
+        # create a query parameter dictionary
+        self.paramsDict = {x: ['', '', ''] for x in self.HeaderList}
+        self.paramsDict[''] = ["{} {} '%{}%'", '', '']
+
     def changeQuery(self, state):
-
         self.state = state
         self.setSearchQuery('')
 
-    # formulating a query to the database
     def setSearchQuery(self, text):
         # switch handling
         try:
@@ -126,139 +156,182 @@ class Elephant_Finder(QWidget):
             params = 'where {}'.format(" and ".join(paramList))
         # assembling the query and updating the table according to it
 
-        #maxLenCol1 = "select max(length(species)) from usda".format(params)
-        """maxLenCol1 = "select species, length(species) from usda order by length(species) "
-        maxCol1 = QtSql.QSqlQuery()
-        maxCol1.exec(maxLenCol1)
-        while maxCol1.next():
-            print(maxCol1.value(0), maxCol1.value(1))
-        """
-
-        self.searchQuery = "select * from usda {}".format(params)
+        self.searchQuery = "select {} from usda {}".format(self.Columns, params)
         #qmodel = QtSql.QSqlQueryModel()
-        self.qmodel.setQuery(self.searchQuery, self.db)
-        self.view.setModel(self.qmodel)
-        self.view.resizeRowsToContents()
+        self.QModel.setQuery(self.searchQuery, self.DB)
 
-    # database creation
-    def createDB(self):
-        # binding to an existing database
-        self.db = QtSql.QSqlDatabase.addDatabase('QSQLITE', "usda")
-        self.db.setDatabaseName('usda.db')
-        self.db.open()
-        # getting a list of headers
-        self.query = QtSql.QSqlQuery(db = self.db)
-        self.query.exec_("PRAGMA table_info(usda)")
-        # filling the list of headings
-        self.headerList = []
-        while self.query.next():
-            self.headerList.append(self.query.value(1))
-        # create a query parameter dictionary
-        self.paramsDict = {x: ['', '', ''] for x in self.headerList}
-        self.paramsDict[''] = ["{} {} '%{}%'", '', '']
-
-    # customize table display
-    def sqlLayout(self):
-        # retrieving data from the database
-        self.qmodel = MySqlModel()
-        self.searchQuery = "select * from usda"
-        self.qmodel.setQuery(self.searchQuery, self.db)
-        # view customization
-        self.view = QTableView(self)
-        self.view.setModel(self.qmodel)
-        header = self.view.horizontalHeader()
+        # set model
+        self.View.setModel(self.QModel)
+        header = self.View.horizontalHeader()
         for i in range(len(header)):
             header.setSectionResizeMode(i, QHeaderView.Stretch)
-        #self.view.resizeColumnsToContents()
-        self.view.resizeRowsToContents()
-        #self.view.setSelectionBehavior(QTableView.SelectRows)
-        self.view.setSelectionMode(QTableView.SingleSelection)
-        self.view.clicked.connect(self.copyText)
-        self.view.setToolTip('Click on the cell to copy the text')
-        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.font = self.view.property('font')
-        layout = QVBoxLayout()
-        layout.addWidget(self.view)
-        layout.setContentsMargins(0, 0, 0, 0)
-        # return table display
-        return layout
+        self.View.resizeRowsToContents()
 
+    def getFileName(self):
+        file_obj = QFileDialog.getOpenFileName(parent=self, caption="Open",
+                                        filter="SQLites Database (*.db)")
+        return file_obj[0]
+
+    def dispatchColumns(self):
+        col_number = len(self.HeaderList)
+        for index in range(col_number):
+            if self.HeaderList[index] not in self.Headers:
+                print("Col {} dispatched".format(index))
+                self.QModel.removeColumn(index)
 
     def copyText(self, index):
-
-        sys_clip = QApplication.clipboard()
-        sys_clip.setText(index.data())
-
-
-    def createParamsDB(self):
-
-        self.paramsdb = QtSql.QSqlDatabase.addDatabase('QSQLITE')
-        self.paramsdb.setDatabaseName('params.db')
-        self.paramsdb.open()
-        self.paramsQuery = QtSql.QSqlQuery(db = self.paramsdb)
-        self.paramsQuery.exec_("create table params(id int primary key, text text, font text)")
-
-
-    def saveParams(self):
-
-        insert = "insert or replace into params values({0}, \"{1}\", \"{2}\")".format(
-            self.id, self.searchQuery, self.font.toString())
-        self.paramsQuery.exec_(insert)
-
-
-    def loadParams(self):
-
-        query = "select * from params where id = {}".format(self.id)
-        self.paramsQuery.exec_(query)
-        self.paramsQuery.next()
-        params = self.paramsQuery.value(1)
-        self.font.fromString(self.paramsQuery.value(2))
-        self.view.setFont(self.font)
-        for i in self.qles:
-            i.setFont(self.font)
-        self.view.resizeRowsToContents()
-        self.paramsParse(params)
-
-
-    def paramsParse(self, params):
-
-        paramList = split(params)
-        self.loadHint = []
-        for name in self.headerList:
-            if name in paramList:
-                param = paramList[paramList.index(name) + 2]
-                if param[0] == '%':
-                    param = param.strip('%')
-                    if param[0] == ' ':
-                        param = param[1:]
-                        self.cb.setChecked(True)
-                    else:
-                        self.cb.setChecked(False)
-                self.qles[self.headerList.index(name)].setText(param)
-                self.loadHint.append([name, param])
-
+        QApplication.clipboard().setText(index.data())
 
     def fontDialog(self):
 
-        self.font, valid = QFontDialog.getFont(self.font)
+        self.TableFont, valid = QFontDialog.getFont(self.TableFont)
+        print(self.TableFont)
         if valid:
-            self.view.setFont(self.font)
-            self.view.resizeRowsToContents()
+            self.View.setFont(self.TableFont)
+            self.View.resizeRowsToContents()
             for i in self.qles:
-                i.setFont(self.font)
+                i.setFont(self.TableFont)
 
+    def closeEvent(self, event):
+        # TODO: write save functions
+        QWidget.close(self)
 
-# class used to align the data in the table to the center
-class MySqlModel(QtSql.QSqlQueryModel):
+class ColumnsWindow(QWidget):
+    def __init__(self, mainwindow):
+        QWidget.__init__(self, parent=mainwindow)
+        self.setWindowFlags(Qt.Tool)
+        self.setWindowTitle('Pick up columns')
 
-    def data(self, index, role=Qt.DisplayRole):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-        return QtSql.QSqlQueryModel.data(self, index, role)
+        self.mainWindow = mainwindow
+        self.mainWindow.Headers = self.mainWindow.HeaderList
+        self.allColModel = self.returnAllColumnsModel()
+        self.currColModel = self.returnCurrentColumnsModel()
+        self.mainWindow.Columns = "{}".format(", ".join(self.currColModel.stringList()))
 
-# launch application
+        self.AllColumnsTable = QListView()
+        self.AllColumnsTable.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.AllColumnsTable.setModel(self.allColModel)
+        self.SelectedColumnsTable = QListView()
+        self.SelectedColumnsTable.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.SelectedColumnsTable.setModel(self.currColModel)
+
+        self.AllColumnsLable = QLabel('Available items:')
+        self.SelectedColumnsLable = QLabel('Current set:')
+
+        self.setStyleSheet(""" QLabel {
+            padding: 6px;
+            background-color: #cfcfcf;
+            font-family: sans-serif;
+            font-weight: 600;
+        }
+        """)
+
+        self.AddButton = QPushButton('>>')
+        self.AddButton.clicked.connect(self.add_single)
+        self.AddButton.setFixedSize(30, 30)
+        self.AddButton.setFlat(True)
+        self.AddButton.setStyleSheet("""QPushButton {
+            background-color: #0c9951;
+            color: #2b2b2b;
+        }""")
+        self.RemoveButton = QPushButton('<<')
+        self.RemoveButton.clicked.connect(self.delete_single)
+        self.RemoveButton.setFixedSize(30, 30)
+        self.RemoveButton.setFlat(True)
+        self.RemoveButton.setStyleSheet("""QPushButton {
+            background-color: #99260c;
+            color: #2b2b2b;
+        }""")
+        self.AddAllButton = QPushButton('Add All')
+        self.AddAllButton.clicked.connect(self.add_all)
+        self.DeleteAllButton = QPushButton('Remove All')
+        self.DeleteAllButton.clicked.connect(self.delete_all)
+        self.OkButton = QPushButton('OK')
+        self.OkButton.clicked.connect(self.save_changes)
+        self.OkButton.setStyleSheet("""QPushButton{
+            background-color: #319149;
+            color: #eee;
+        }""")
+        self.CancelButton = QPushButton('Cancel')
+        self.CancelButton.clicked.connect(self.close)
+        self.CancelButton.setStyleSheet("""QPushButton{
+            background-color: #882d2d;
+            color: #eee;
+        }""")
+
+        self.AllColumnsLayout = QVBoxLayout()
+        self.AllColumnsLayout.addWidget(self.AllColumnsLable)
+        self.AllColumnsLayout.addWidget(self.AllColumnsTable)
+
+        self.SelectedColumnsLayout = QVBoxLayout()
+        self.SelectedColumnsLayout.addWidget(self.SelectedColumnsLable)
+        self.SelectedColumnsLayout.addWidget(self.SelectedColumnsTable)
+
+        self.ARButtonsLayout = QVBoxLayout()
+        self.ARButtonsLayout.addWidget(self.AddButton)
+        self.ARButtonsLayout.addWidget(self.RemoveButton)
+        self.ARButtonsLayout.setAlignment(Qt.AlignHCenter)
+
+        self.ButtonsLayout = QVBoxLayout()
+        self.ButtonsLayout.addWidget(self.AddAllButton)
+        self.ButtonsLayout.addWidget(self.DeleteAllButton)
+        self.ButtonsLayout.addWidget(self.OkButton)
+        self.ButtonsLayout.addWidget(self.CancelButton)
+        self.ButtonsLayout.setAlignment(Qt.AlignBottom)
+
+        self.MainLayout = QHBoxLayout()
+        self.MainLayout.addLayout(self.AllColumnsLayout)
+        self.MainLayout.addLayout(self.ARButtonsLayout)
+        self.MainLayout.addLayout(self.SelectedColumnsLayout)
+        self.MainLayout.addLayout(self.ButtonsLayout)
+
+        self.setLayout(self.MainLayout)
+
+    def add_all(self):
+        lst = self.returnAllColumnsModel().stringList()
+        self.currColModel.setStringList(lst)
+
+    def add_single(self):
+        selected_list = self.AllColumnsTable.selectedIndexes()
+        old_list = self.currColModel.stringList()
+        new_list = [selected.data() for selected in selected_list]
+        self.currColModel.setStringList(old_list + new_list)
+
+    def delete_all(self):
+        self.currColModel.removeRows(0, self.currColModel.rowCount())
+
+    def delete_single(self):
+        selected_list = self.SelectedColumnsTable.selectedIndexes()
+        counter = 0
+        for index in selected_list:
+            self.currColModel.removeRows(index.row()-counter, 1)
+            counter += 1
+
+    def save_changes(self):
+
+        self.mainWindow.Headers = self.currColModel.stringList()
+        self.mainWindow.Columns = "{}".format(", ".join(self.currColModel.stringList()))
+        self.loadChanges()
+
+    def loadChanges(self):
+        self.mainWindow.setTable()
+        # self.mainWindow.makeSearchFieldsGrid()
+
+    def returnCurrentColumnsModel(self):
+        columns = [item for item in self.mainWindow.Headers]
+        sli = QStringListModel(columns)
+        return sli
+
+    def returnAllColumnsModel(self):
+        columns = [item for item in self.mainWindow.HeaderList]
+        sli_all = QStringListModel(columns)
+        return sli_all
+
 if __name__ == '__main__':
-
     app = QApplication(sys.argv)
-    ex = Elephant_Finder()
+
+    MainWindow = MainWindow()
+    MainWindow.show()
+    MainWindow.ColumnsWindow.show()
+
     sys.exit(app.exec_())
