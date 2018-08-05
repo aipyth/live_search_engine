@@ -18,17 +18,16 @@ class MainWindow(QWidget):
         QWidget.__init__(self)
         self.resize(1500, 900)
         self.id = 0
-
-        self.createDB()
-        self.ColumnsWindow = ColumnsWindow(self)
-
+        self.table = ''
+        self.Columns = '*'
 
         self.View = QTableView()
-        self.setTable()
         self.TableFont = self.View.property('font')
 
+        self.openDB()
+
         self.OpenButton = QPushButton('Open DB')
-        self.OpenButton.clicked.connect(self.createDB)
+        self.OpenButton.clicked.connect(self.openDB)
 
         self.SetColumnsButton = QPushButton('Columns')
         self.SetColumnsButton.clicked.connect(self.ColumnsWindow.show)
@@ -53,10 +52,21 @@ class MainWindow(QWidget):
 
         self.setLayout(self.mainLayout)
 
+    def openDB(self):
+        self.FilePath = self.getFileName()
+        self.createDB()
+        self.getHeaders()
+        self.setTable()
+
+        self.ColumnsWindow = ColumnsWindow(self)
+
     def setTable(self):
+        self.Columns = '*' if self.Columns == '' else self.Columns
         # self.QModel = QtSql.QSqlQueryModel()
         self.QModel = MySqlModel()
-        self.SearchQuery = "select {} from usda".format(self.Columns)
+        self.SearchQuery = "select {} from {}".format(self.Columns, self.table)
+        print(self.SearchQuery)
+        # self.SearchQuery = "select {} from usda".format(self.Columns)#, self.table)
         self.QModel.setQuery(self.SearchQuery, self.DB)
         self.View.setModel(self.QModel)
 
@@ -77,7 +87,7 @@ class MainWindow(QWidget):
 
         n = len(self.Headers)
         qwidth = [self.View.columnWidth(i) for i in range(n)]
-        print(qwidth)
+        # print(qwidth)
         self.qles = [None for i in range(n)]
         for i in range(0, n):
             self.qles[i] = QLineEdit(self)
@@ -88,16 +98,17 @@ class MainWindow(QWidget):
 
     def createDB(self):
         # binding to an existing database
-        self.FilePath = self.getFileName()
-        self.DB = QtSql.QSqlDatabase.addDatabase('QSQLITE', "usda")
+
+        self.DB = QtSql.QSqlDatabase.addDatabase('QSQLITE')
 
         # self.DB.setDatabaseName('usda.db')
         self.DB.setDatabaseName(self.FilePath)
         self.DB.open()
 
+    def getHeaders(self):
         # getting a list of Headers
         self.query = QtSql.QSqlQuery(db = self.DB)
-        self.query.exec_("PRAGMA table_info(usda)")
+        self.query.exec_("PRAGMA table_info({})".format(self.table))
 
         # filling the list of headings
         self.HeaderList = []
@@ -156,9 +167,11 @@ class MainWindow(QWidget):
             params = 'where {}'.format(" and ".join(paramList))
         # assembling the query and updating the table according to it
 
-        self.searchQuery = "select {} from usda {}".format(self.Columns, params)
+        self.Columns = '*' if self.Columns == '' else self.Columns
+        self.searchQuery = "select {} from {} {}".format(self.Columns, self.table, params)
         #qmodel = QtSql.QSqlQueryModel()
         self.QModel.setQuery(self.searchQuery, self.DB)
+        self.dispatchColumns()
 
         # set model
         self.View.setModel(self.QModel)
@@ -204,10 +217,15 @@ class ColumnsWindow(QWidget):
 
         self.mainWindow = mainwindow
         self.mainWindow.Headers = self.mainWindow.HeaderList
+        self.allTablesModel = self.returnAllTables()
         self.allColModel = self.returnAllColumnsModel()
         self.currColModel = self.returnCurrentColumnsModel()
         self.mainWindow.Columns = "{}".format(", ".join(self.currColModel.stringList()))
 
+        self.PickTableTable = QListView()
+        self.PickTableTable.pressed.connect(self.setTable)
+        self.PickTableTable.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.PickTableTable.setModel(self.allTablesModel)
         self.AllColumnsTable = QListView()
         self.AllColumnsTable.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.AllColumnsTable.setModel(self.allColModel)
@@ -215,6 +233,7 @@ class ColumnsWindow(QWidget):
         self.SelectedColumnsTable.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.SelectedColumnsTable.setModel(self.currColModel)
 
+        self.PickTableLable = QLabel('Pick a table:')
         self.AllColumnsLable = QLabel('Available items:')
         self.SelectedColumnsLable = QLabel('Current set:')
 
@@ -259,6 +278,10 @@ class ColumnsWindow(QWidget):
             color: #eee;
         }""")
 
+        self.PickTableLayout = QVBoxLayout()
+        self.PickTableLayout.addWidget(self.PickTableLable)
+        self.PickTableLayout.addWidget(self.PickTableTable)
+
         self.AllColumnsLayout = QVBoxLayout()
         self.AllColumnsLayout.addWidget(self.AllColumnsLable)
         self.AllColumnsLayout.addWidget(self.AllColumnsTable)
@@ -280,12 +303,17 @@ class ColumnsWindow(QWidget):
         self.ButtonsLayout.setAlignment(Qt.AlignBottom)
 
         self.MainLayout = QHBoxLayout()
+        self.MainLayout.addLayout(self.PickTableLayout)
         self.MainLayout.addLayout(self.AllColumnsLayout)
         self.MainLayout.addLayout(self.ARButtonsLayout)
         self.MainLayout.addLayout(self.SelectedColumnsLayout)
         self.MainLayout.addLayout(self.ButtonsLayout)
 
         self.setLayout(self.MainLayout)
+
+        if self.mainWindow.DB.isOpen():
+            mindex = QModelIndex()
+            self.PickTableTable.pressed.emit(mindex)
 
     def add_all(self):
         lst = self.returnAllColumnsModel().stringList()
@@ -314,8 +342,21 @@ class ColumnsWindow(QWidget):
         self.loadChanges()
 
     def loadChanges(self):
+
         self.mainWindow.setTable()
         # self.mainWindow.makeSearchFieldsGrid()
+
+    def setTable(self, table):
+        self.mainWindow.table = table.data()
+        print("self.mainWindow.table = '{}'".format(self.mainWindow.table))
+        self.mainWindow.getHeaders()
+        self.mainWindow.setTable()
+        self.update_info()
+
+    def returnAllTables(self):
+        columns = self.mainWindow.DB.tables()
+        sli = QStringListModel(columns)
+        return sli
 
     def returnCurrentColumnsModel(self):
         columns = [item for item in self.mainWindow.Headers]
@@ -326,6 +367,15 @@ class ColumnsWindow(QWidget):
         columns = [item for item in self.mainWindow.HeaderList]
         sli_all = QStringListModel(columns)
         return sli_all
+
+    def update_info(self):
+        self.allTablesModel = self.returnAllTables()
+        self.allColModel = self.returnAllColumnsModel()
+        self.currColModel = self.returnAllColumnsModel()
+
+        self.PickTableTable.setModel(self.allTablesModel)
+        self.AllColumnsTable.setModel(self.allColModel)
+        self.SelectedColumnsTable.setModel(self.currColModel)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
