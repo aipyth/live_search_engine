@@ -54,11 +54,22 @@ class MainWindow(QWidget):
 
     def openDB(self):
         self.FilePath = self.getFileName()
-        self.createDB()
-        self.getHeaders()
-        self.setTable()
+        if self.FilePath:
+            self.createDB()
+            self.getHeaders()
+            self.setTable()
 
-        self.ColumnsWindow = ColumnsWindow(self)
+
+
+            try:
+                self.ColumnsWindow.hide()
+                self.ColumnsWindow.close()
+                self.ColumnsWindow.deleteLater()
+
+                self.ColumnsWindow = ColumnsWindow(self)
+                self.SetColumnsButton.clicked.connect(self.ColumnsWindow.show)
+            except AttributeError:
+                self.ColumnsWindow = ColumnsWindow(self)
 
     def setTable(self):
         self.Columns = '*' if self.Columns == '' else self.Columns
@@ -73,6 +84,7 @@ class MainWindow(QWidget):
         header = self.View.horizontalHeader()
         for i in range(len(header)):
             header.setSectionResizeMode(i, QHeaderView.Stretch)
+        # self.View.resizeColumnsToContents()
         self.View.resizeRowsToContents()
         self.View.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.View.clicked.connect(self.copyText)
@@ -80,21 +92,36 @@ class MainWindow(QWidget):
     def makeSearchFieldsGrid(self):
         self.SearchFieldsGrid.setSpacing(5)
 
+        self.clearLayout(self.SearchFieldsGrid)
+
         self.cb = QCheckBox(self)
         self.cb.stateChanged.connect(self.changeQuery)
-        self.SearchFieldsGrid.addWidget(self.cb, 1, 0)
-        self.SearchFieldsGrid.setColumnMinimumWidth(0, 30)
+        self.SearchFieldsGrid.addWidget(self.cb, 0, 0)
+        # self.SearchFieldsGrid.setColumnMinimumWidth(0, 30)
 
         n = len(self.Headers)
         qwidth = [self.View.columnWidth(i) for i in range(n)]
         # print(qwidth)
         self.qles = [None for i in range(n)]
-        for i in range(0, n):
+        for i in range(n):
             self.qles[i] = QLineEdit(self)
-            self.qles[i].setObjectName(self.HeaderList[i])
+            self.qles[i].setObjectName(self.Headers[i])
             self.qles[i].textChanged[str].connect(self.setSearchQuery)
+
+            label = QLabel(self.Headers[i])
+
+            self.SearchFieldsGrid.addWidget(label, 0, i + 1, alignment=Qt.AlignCenter)
             self.SearchFieldsGrid.addWidget(self.qles[i], 1, i + 1)
             self.SearchFieldsGrid.setColumnMinimumWidth(i + 1, qwidth[i] - 5)
+
+
+    def clearLayout(self, layout):
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget() is not None:
+                child.widget().deleteLater()
+            elif child.layout() is not None:
+                clearLayout(child.layout())
 
     def createDB(self):
         # binding to an existing database
@@ -311,9 +338,12 @@ class ColumnsWindow(QWidget):
 
         self.setLayout(self.MainLayout)
 
-        if self.mainWindow.DB.isOpen():
-            mindex = QModelIndex()
-            self.PickTableTable.pressed.emit(mindex)
+        self.show()
+
+        # if self.mainWindow.DB.isOpen():
+        #     mindex = QModelIndex()
+        #     self.PickTableTable.pressed.emit(mindex)
+        #     self.update()
 
     def add_all(self):
         lst = self.returnAllColumnsModel().stringList()
@@ -344,13 +374,15 @@ class ColumnsWindow(QWidget):
     def loadChanges(self):
 
         self.mainWindow.setTable()
-        # self.mainWindow.makeSearchFieldsGrid()
+        self.mainWindow.makeSearchFieldsGrid()
 
     def setTable(self, table):
+        import pdb; pdb.set_trace()
         self.mainWindow.table = table.data()
         print("self.mainWindow.table = '{}'".format(self.mainWindow.table))
         self.mainWindow.getHeaders()
         self.mainWindow.setTable()
+        self.mainWindow.makeSearchFieldsGrid()
         self.update_info()
 
     def returnAllTables(self):
