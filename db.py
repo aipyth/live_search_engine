@@ -58,8 +58,7 @@ class MainWindow(QWidget):
             self.createDB()
             self.getHeaders()
             self.setTable()
-
-
+            # self.makeSearchFieldsGrid()
 
             try:
                 self.ColumnsWindow.hide()
@@ -94,9 +93,9 @@ class MainWindow(QWidget):
 
         self.clearLayout(self.SearchFieldsGrid)
 
-        self.cb = QCheckBox(self)
-        self.cb.stateChanged.connect(self.changeQuery)
-        self.SearchFieldsGrid.addWidget(self.cb, 0, 0)
+        # self.cb = QCheckBox(self)
+        # self.cb.stateChanged.connect(self.changeQuery)
+        # self.SearchFieldsGrid.addWidget(self.cb, 0, 0)
         # self.SearchFieldsGrid.setColumnMinimumWidth(0, 30)
 
         n = len(self.Headers)
@@ -112,7 +111,7 @@ class MainWindow(QWidget):
 
             self.SearchFieldsGrid.addWidget(label, 0, i + 1, alignment=Qt.AlignCenter)
             self.SearchFieldsGrid.addWidget(self.qles[i], 1, i + 1)
-            self.SearchFieldsGrid.setColumnMinimumWidth(i + 1, qwidth[i] - 5)
+            # self.SearchFieldsGrid.setColumnMinimumWidth(i + 1, qwidth[i] - 5)
 
 
     def clearLayout(self, layout):
@@ -198,7 +197,7 @@ class MainWindow(QWidget):
         self.searchQuery = "select {} from {} {}".format(self.Columns, self.table, params)
         #qmodel = QtSql.QSqlQueryModel()
         self.QModel.setQuery(self.searchQuery, self.DB)
-        self.dispatchColumns()
+        # self.dispatchColumns()
 
         # set model
         self.View.setModel(self.QModel)
@@ -340,11 +339,6 @@ class ColumnsWindow(QWidget):
 
         self.show()
 
-        # if self.mainWindow.DB.isOpen():
-        #     mindex = QModelIndex()
-        #     self.PickTableTable.pressed.emit(mindex)
-        #     self.update()
-
     def add_all(self):
         lst = self.returnAllColumnsModel().stringList()
         self.currColModel.setStringList(lst)
@@ -370,6 +364,7 @@ class ColumnsWindow(QWidget):
         self.mainWindow.Headers = self.currColModel.stringList()
         self.mainWindow.Columns = "{}".format(", ".join(self.currColModel.stringList()))
         self.loadChanges()
+        self.hide()
 
     def loadChanges(self):
 
@@ -381,8 +376,10 @@ class ColumnsWindow(QWidget):
         print("self.mainWindow.table = '{}'".format(self.mainWindow.table))
         self.mainWindow.getHeaders()
         self.mainWindow.setTable()
-        self.mainWindow.makeSearchFieldsGrid()
         self.update_info()
+        self.mainWindow.makeSearchFieldsGrid()
+        self.mainWindow.Headers = self.currColModel.stringList()
+        self.loadChanges()
 
     def returnAllTables(self):
         columns = self.mainWindow.DB.tables()
