@@ -71,38 +71,23 @@ class MainWindow(QWidget):
             except AttributeError:
                 self.ColumnsWindow = ColumnsWindow(self)
 
-    # def adjustColumns(self):
-    #     number = len(self.Headers)
-        # for index in range(number):
-        #     width = self.width() / number
-        #     self.View.setColumnWidth(index, width)
-
-    # def resizeEvent(self, event):
-    #     self.adjustSize()
-    #     QWidget.resizeEvent(self, event)
-
     def setTable(self):
         self.Columns = '*' if self.Columns == '' else self.Columns
         # self.QModel = QtSql.QSqlQueryModel()
         self.QModel = MySqlModel()
         self.SearchQuery = "select {} from {}".format(self.Columns, self.table)
-        # self.SearchQuery = "select * from {}".format(self.table)
         print(self.SearchQuery)
         # self.SearchQuery = "select {} from usda".format(self.Columns)#, self.table)
         self.QModel.setQuery(self.SearchQuery, self.DB)
         self.View.setModel(self.QModel)
 
-        # self.adjustColumns()
-
-        # header = self.View.horizontalHeader()
-        # for i in range(len(header)):
-        #     header.setSectionResizeMode(i, QHeaderView.Stretch)
+        header = self.View.horizontalHeader()
+        for i in range(len(header)):
+            header.setSectionResizeMode(i, QHeaderView.Stretch)
         # self.View.resizeColumnsToContents()
         self.View.resizeRowsToContents()
         self.View.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.View.clicked.connect(self.copyText)
-
-        # self.dispatchColumns()
 
     def makeSearchFieldsGrid(self):
         self.SearchFieldsGrid.setSpacing(5)
@@ -129,6 +114,7 @@ class MainWindow(QWidget):
             self.SearchFieldsGrid.addWidget(self.qles[i], 1, i + 1)
             self.SearchFieldsGrid.setColumnMinimumWidth(i + 1, qwidth[i] - 5)
 
+
     def clearLayout(self, layout):
         while layout.count():
             child = layout.takeAt(0)
@@ -139,7 +125,9 @@ class MainWindow(QWidget):
 
     def createDB(self):
         # binding to an existing database
+
         self.DB = QtSql.QSqlDatabase.addDatabase('QSQLITE')
+
         # self.DB.setDatabaseName('usda.db')
         self.DB.setDatabaseName(self.FilePath)
         self.DB.open()
@@ -153,8 +141,6 @@ class MainWindow(QWidget):
         self.HeaderList = []
         while self.query.next():
             self.HeaderList.append(self.query.value(1))
-
-        self.Headers = self.HeaderList
 
         # create a query parameter dictionary
         self.paramsDict = {x: ['', '', ''] for x in self.HeaderList}
@@ -210,7 +196,6 @@ class MainWindow(QWidget):
 
         self.Columns = '*' if self.Columns == '' else self.Columns
         self.searchQuery = "select {} from {} {}".format(self.Columns, self.table, params)
-        # self.searchQuery = "select * from {} {}".format(self.table, params)
         #qmodel = QtSql.QSqlQueryModel()
         self.QModel.setQuery(self.searchQuery, self.DB)
         self.dispatchColumns()
@@ -354,6 +339,11 @@ class ColumnsWindow(QWidget):
         self.setLayout(self.MainLayout)
 
         self.show()
+
+        # if self.mainWindow.DB.isOpen():
+        #     mindex = QModelIndex()
+        #     self.PickTableTable.pressed.emit(mindex)
+        #     self.update()
 
     def add_all(self):
         lst = self.returnAllColumnsModel().stringList()
