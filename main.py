@@ -521,8 +521,11 @@ class MainWindow(QWidget):
             self.showInfo('Error', str(errors))
             return
 
+<<<<<<< HEAD
         # self.CSVTable.Header = np.array(self.DataInformation['lastTableCol'])
 
+=======
+>>>>>>> db
         for field in self.SearchFields:
             field.add_headers_into_cb(self.CSVTable.Header)
 
@@ -533,6 +536,7 @@ class MainWindow(QWidget):
         table.Table = np.column_stack(pick_up_col)[1:]
         table.Header = np.array(columns)
         self.setItemModel(table.Table)
+<<<<<<< HEAD
 
         number_of_col = len(self.DataInformation['lastSFCol'])
         for iter in range(number_of_col):
@@ -543,6 +547,14 @@ class MainWindow(QWidget):
             field.ParamInput.setText()
 
         # self.setItemModel(self.CSVTable.Table)
+=======
+        
+        for item in self.SearchFields:
+            try:
+                item.add_headers_into_cb(table.Header)
+            except AttributeError:
+                pass
+>>>>>>> db
 
         print("Open file time - ", time() - st)
 
@@ -678,7 +690,7 @@ class SearchThread(QThread):
         self.exit()
         self.deleteLater()
 
-class NewSearchThread(QThread): # TODO: here write a support for or, and, ()
+class NewSearchThread(QThread): # TODO: here write a support for and, or, ()
                                 # and replace with SearchThread
     searchdone = pyqtSignal(np.ndarray)
     def __init__(self, window, table_obj):
