@@ -1,10 +1,14 @@
 import sys
+import re
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5 import QtSql
 from shlex import split
+
+myDatabase = "E:/User/programming/python_projects/search_eng/usda.db"
+myTable = 'usda'
 
 class MySqlModel(QtSql.QSqlQueryModel):
 
@@ -19,7 +23,11 @@ class MainWindow(QWidget):
         self.resize(1500, 900)
         self.id = 0
         self.table = ''
+        # self.table = myTable
         self.Columns = '*'
+        self.left_padding = 0
+        self.right_padding = 0
+        self.search_field_spacing = 5
 
         self.View = QTableView()
         self.TableFont = self.View.property('font')
@@ -36,8 +44,14 @@ class MainWindow(QWidget):
         self.FontButton.clicked.connect(self.fontDialog)
 
         # LAYOUTS
+        self.search_layout = QHBoxLayout()
+        self.search_layout.insertSpacing(0, self.left_padding)
+
         self.SearchFieldsGrid = QGridLayout()
         self.makeSearchFieldsGrid()
+
+        self.search_layout.addLayout(self.SearchFieldsGrid)
+        self.search_layout.insertSpacing(-1, self.right_padding)
 
         self.ButtonBox = QHBoxLayout()
         self.ButtonBox.setAlignment(Qt.AlignLeft)
@@ -47,18 +61,55 @@ class MainWindow(QWidget):
 
         self.mainLayout = QVBoxLayout()
         self.mainLayout.addLayout(self.ButtonBox)
-        self.mainLayout.addLayout(self.SearchFieldsGrid)
+        # self.mainLayout.addLayout(self.SearchFieldsGrid)
+        self.mainLayout.addLayout(self.search_layout)
         self.mainLayout.addWidget(self.View)
 
         self.setLayout(self.mainLayout)
 
+        # OTHER STUFF
+        self.ColumnsWindow.setTable(self.table)
+
+        self.View_vertical_header = self.View.verticalHeader()
+        self.View_vertical_header.geometriesChanged.connect(self._align_search_layout)
+
+
+    def _align_search_layout(self):
+        vertical_header_width = self.View_vertical_header.width()
+        checkbox_width = self.cb.width()
+        self.left_padding = vertical_header_width - checkbox_width - self.search_field_spacing
+        vertical_scrollbar_width = self.View.verticalScrollBar().width()
+        self.right_padding = vertical_scrollbar_width
+
+        left_spacer = self.search_layout.itemAt(0)
+        left_spacer.changeSize(self.left_padding, 10)
+
+        right_spacer = self.search_layout.itemAt(2)
+        right_spacer.changeSize(self.right_padding, 10)
+
+        self.search_layout.invalidate()
+
     def openDB(self):
-        self.FilePath = self.getFileName()
+        try:
+            if myDatabase:
+                self.FilePath = myDatabase
+        except NameError:
+            self.FilePath = self.getFileName()
+
         if self.FilePath:
             self.createDB()
             self.getHeaders()
-            self.setTable()
+
             # self.makeSearchFieldsGrid()
+
+            tables = self.DB.tables()
+            print(self.FilePath)
+            self.filename = re.search(r"(\w+)\.db", self.FilePath).group(0)
+            self.filename = re.sub('.db', '', self.filename)
+            if self.filename in tables:
+                self.table = self.filename
+
+            self.setTable()
 
             try:
                 self.ColumnsWindow.hide()
@@ -70,32 +121,35 @@ class MainWindow(QWidget):
             except AttributeError:
                 self.ColumnsWindow = ColumnsWindow(self)
 
+
     def setTable(self):
         self.Columns = '*' if self.Columns == '' else self.Columns
         # self.QModel = QtSql.QSqlQueryModel()
         self.QModel = MySqlModel()
         self.SearchQuery = "select {} from {}".format(self.Columns, self.table)
-        print(self.SearchQuery)
+        # print(self.SearchQuery)
         # self.SearchQuery = "select {} from usda".format(self.Columns)#, self.table)
         self.QModel.setQuery(self.SearchQuery, self.DB)
         self.View.setModel(self.QModel)
 
         header = self.View.horizontalHeader()
         for i in range(len(header)):
-            header.setSectionResizeMode(i, QHeaderView.Stretch)
+            # header.setSectionResizeMode(i, QHeaderView.Stretch)
+            # header.setSectionResizeMode(QHeaderView.Interactive | QHeaderView.Stretch)
+            header.setSectionResizeMode(QHeaderView.Stretch)
         # self.View.resizeColumnsToContents()
         self.View.resizeRowsToContents()
-        self.View.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # self.View.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.View.clicked.connect(self.copyText)
 
     def makeSearchFieldsGrid(self):
-        self.SearchFieldsGrid.setSpacing(5)
+        self.SearchFieldsGrid.setSpacing(self.search_field_spacing)
 
         self.clearLayout(self.SearchFieldsGrid)
 
-        # self.cb = QCheckBox(self)
-        # self.cb.stateChanged.connect(self.changeQuery)
-        # self.SearchFieldsGrid.addWidget(self.cb, 0, 0)
+        self.cb = QCheckBox(self)
+        self.cb.stateChanged.connect(self.changeQuery)
+        self.SearchFieldsGrid.addWidget(self.cb, 0, 0)
         # self.SearchFieldsGrid.setColumnMinimumWidth(0, 30)
 
         n = len(self.Headers)
@@ -129,6 +183,7 @@ class MainWindow(QWidget):
 
         # self.DB.setDatabaseName('usda.db')
         self.DB.setDatabaseName(self.FilePath)
+        # self.DB.setDatabaseName(myDatabase)
         self.DB.open()
 
     def getHeaders(self):
@@ -195,6 +250,7 @@ class MainWindow(QWidget):
 
         self.Columns = '*' if self.Columns == '' else self.Columns
         self.searchQuery = "select {} from {} {}".format(self.Columns, self.table, params)
+        print(self.searchQuery)
         #qmodel = QtSql.QSqlQueryModel()
         self.QModel.setQuery(self.searchQuery, self.DB)
         # self.dispatchColumns()
@@ -203,7 +259,7 @@ class MainWindow(QWidget):
         self.View.setModel(self.QModel)
         header = self.View.horizontalHeader()
         for i in range(len(header)):
-            header.setSectionResizeMode(i, QHeaderView.Stretch)
+            header.setSectionResizeMode(QHeaderView.Stretch)
         self.View.resizeRowsToContents()
 
     def getFileName(self):
@@ -337,7 +393,7 @@ class ColumnsWindow(QWidget):
 
         self.setLayout(self.MainLayout)
 
-        self.show()
+        # self.show()
 
     def add_all(self):
         lst = self.returnAllColumnsModel().stringList()
@@ -372,7 +428,10 @@ class ColumnsWindow(QWidget):
         self.mainWindow.makeSearchFieldsGrid()
 
     def setTable(self, table):
-        self.mainWindow.table = table.data()
+        try:
+            self.mainWindow.table = table.data()
+        except AttributeError:
+            pass
         print("self.mainWindow.table = '{}'".format(self.mainWindow.table))
         self.mainWindow.getHeaders()
         self.mainWindow.setTable()
